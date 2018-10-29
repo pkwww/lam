@@ -7,7 +7,11 @@ data LamTerm where
   LamLam :: String -> LamTerm -> LamTerm 
   LamApp :: LamTerm -> LamTerm -> LamTerm
   NatLit :: Nat -> LamTerm
- 
+
+data Context a where
+  Nil :: Context a
+  Cons :: a -> Context a -> Context a
+
 natToInt :: Nat -> Integer
 natToInt Zero = 0
 natToInt (Succ n) = 1 + natToInt n
@@ -27,9 +31,19 @@ alphaConversion to from (LamLam var term) = if var == from
                                             then LamLam to (alphaConversion to from term) 
                                             else LamLam var (alphaConversion to from term)
 alphaConversion to from (LamApp term1 term2) = LamApp (alphaConversion to from term1) (alphaConversion to from term2)
-alphaConversion to from n = n
+alphaConversion _ _ n = n
 
---substitude :: LamTerm -> String -> LamTerm -> LamTerm
+-- not yet consider context, free var should not captured by bounded var, need a variable context
+substitude :: LamTerm -> String -> LamTerm -> LamTerm
+substitude (Id s) var substitudeTerm = if s == var then substitudeTerm else (Id s)
+substitude (LamLam boundedVar term) substitudeVar substitudeTerm = if substitudeVar == boundedVar 
+  then (LamLam boundedVar term) 
+  else (LamLam boundedVar (substitude term substitudeVar substitudeTerm))
+substitude (LamApp term1 term2) var substitudeTerm = LamApp (substitude term1 var substitudeTerm) (substitude term2 var substitudeTerm)
+substitude n _ _ = n
 
+substitudeTerm1 = Id "x"
+termTest = LamLam "x" (Id "y")
+termAfter = substitude termTest "y" substitudeTerm1
 
-main = print ""
+main = print termAfter

@@ -1,4 +1,8 @@
+import Data.List
 
+type Context a = [a]
+type VarContext = Context String
+type Variable = String
 
 -- don't want to bother with Church numerals
 data Nat = Zero | Succ Nat
@@ -7,10 +11,6 @@ data LamTerm where
   LamLam :: String -> LamTerm -> LamTerm 
   LamApp :: LamTerm -> LamTerm -> LamTerm
   NatLit :: Nat -> LamTerm
-
-type Context a = [a]
-type VarContext = Context String
-type Variable = String
 
 natToInt :: Nat -> Integer
 natToInt Zero = 0
@@ -25,34 +25,54 @@ instance Show LamTerm where
   show (LamApp term1 term2) = "(" ++ show term1 ++ ")(" ++ show term2 ++ ")"
   show (NatLit n) = show n
 
-alphaConversion :: VarContext -> Variable -> Variable -> LamTerm -> LamTerm
-alphaConversion context to from (Id s) = 
+alphaConversionHelper :: VarContext -> Variable -> Variable -> LamTerm -> LamTerm
+alphaConversionHelper context to from (Id s) = 
   if s == from 
-  then if to `inContext` context
-        then undefined
-        else Id to 
+    then if to `inContext` context 
+      then undefined 
+      else Id to 
   else Id s
-alphaConversion context to from (LamLam var term) = 
+alphaConversionHelper context to from (LamLam var term) = 
   let extendContext = var : context in
     if var == from
-    then LamLam to (alphaConversion extendContext to from term)
-    else LamLam var (alphaConversion extendContext to from term)
-alphaConversion context to from (LamApp term1 term2) = 
-  LamApp (alphaConversion context to from term1) (alphaConversion context to from term2)
-alphaConversion context _ _ n = n
+      then LamLam to (alphaConversionHelper extendContext to from term)
+      else LamLam var (alphaConversionHelper extendContext to from term)
+alphaConversionHelper context to from (LamApp term1 term2) = 
+  LamApp (alphaConversionHelper context to from term1) (alphaConversionHelper context to from term2)
+alphaConversionHelper context _ _ n = n
+
+alphaConversion :: Variable -> Variable -> LamTerm -> LamTerm
+alphaConversion to from term = alphaConversionHelper [] to from term
 
 inContext :: Variable -> VarContext -> Bool
 inContext = elem
 
-{- substitude :: LamTerm -> String -> LamTerm -> LamTerm
-substitude (Id s) var substitudeTerm = if s == var then substitudeTerm else (Id s)
-substitude (LamLam boundedVar term) substitudeVar substitudeTerm = if substitudeVar == boundedVar 
-  then (LamLam boundedVar term) 
-  else (LamLam boundedVar (substitude term substitudeVar substitudeTerm))
-substitude (LamApp term1 term2) var substitudeTerm = 
-  LamApp (substitude term1 var substitudeTerm) (substitude term2 var substitudeTerm)
-substitude n _ _ = n -}
+contextOf :: LamTerm -> VarContext
+contextOf (Id s) = [s]
+contextOf (LamLam var term) = var : (contextOf term)
+contextOf (LamApp term1 term2) = (contextOf term1) `union` (contextOf term2)
+contextOf (NatLit n) = []
+
+substitudeHelp :: LamTerm -> VarContext -> Variable -> LamTerm -> LamTerm
+substitudeHelp (Id s) _ var substitudeTerm = 
+  if s == var 
+    then substitudeTerm 
+    else (Id s)
+substitudeHelp (LamLam boundedVar term) context substitudeVar substitudeTerm = 
+  if substitudeVar == boundedVar
+    then (LamLam boundedVar term) 
+    else if boundedVar `inContext` context
+      then undefined
+      else (LamLam boundedVar (substitudeHelp term context substitudeVar substitudeTerm))
+substitudeHelp (LamApp term1 term2) context var substitudeTerm = 
+  LamApp (substitudeHelp term1 context var substitudeTerm) (substitudeHelp term2 context var substitudeTerm)
+substitudeHelp n _ _ _ = n
+
+substitude :: LamTerm -> Variable -> LamTerm -> LamTerm
+substitude originalTerm var substitudeTerm = substitudeHelp originalTerm (contextOf substitudeTerm) var substitudeTerm
 
 termTest = LamLam "x" (Id "y")
+subTerm = (Id "w")
+afterTerm = substitude termTest "y" subTerm
 
-main = print termTest
+main = print afterTerm

@@ -10,7 +10,6 @@ data LamTerm where
   Id :: String -> LamTerm
   LamLam :: String -> LamTerm -> LamTerm 
   LamApp :: LamTerm -> LamTerm -> LamTerm
-  NatLit :: Nat -> LamTerm
 
 natToInt :: Nat -> Integer
 natToInt Zero = 0
@@ -23,7 +22,6 @@ instance Show LamTerm where
   show (Id s) = show s
   show (LamLam var term) = "\\" ++ show var ++ "." ++ show term
   show (LamApp term1 term2) = "(" ++ show term1 ++ ")(" ++ show term2 ++ ")"
-  show (NatLit n) = show n
 
 alphaConversionHelper :: VarContext -> Variable -> Variable -> LamTerm -> LamTerm
 alphaConversionHelper context to from (Id s) = 
@@ -39,7 +37,6 @@ alphaConversionHelper context to from (LamLam var term) =
       else LamLam var (alphaConversionHelper extendContext to from term)
 alphaConversionHelper context to from (LamApp term1 term2) = 
   LamApp (alphaConversionHelper context to from term1) (alphaConversionHelper context to from term2)
-alphaConversionHelper context _ _ n = n
 
 alphaConversion :: Variable -> Variable -> LamTerm -> LamTerm
 alphaConversion to from term = alphaConversionHelper [] to from term
@@ -51,7 +48,6 @@ contextOf :: LamTerm -> VarContext
 contextOf (Id s) = [s]
 contextOf (LamLam var term) = var : (contextOf term)
 contextOf (LamApp term1 term2) = (contextOf term1) `union` (contextOf term2)
-contextOf (NatLit n) = []
 
 substitudeHelp :: LamTerm -> VarContext -> Variable -> LamTerm -> LamTerm
 substitudeHelp (Id s) _ var substitudeTerm = 
@@ -66,10 +62,18 @@ substitudeHelp (LamLam boundedVar term) context substitudeVar substitudeTerm =
       else (LamLam boundedVar (substitudeHelp term context substitudeVar substitudeTerm))
 substitudeHelp (LamApp term1 term2) context var substitudeTerm = 
   LamApp (substitudeHelp term1 context var substitudeTerm) (substitudeHelp term2 context var substitudeTerm)
-substitudeHelp n _ _ _ = n
 
 substitude :: LamTerm -> Variable -> LamTerm -> LamTerm
 substitude originalTerm var substitudeTerm = substitudeHelp originalTerm (contextOf substitudeTerm) var substitudeTerm
+
+-- call by name
+type Gas = Integer
+eval :: LamTerm -> LamTerm
+eval (Id s) = Id s
+eval (LamLam var term) = LamLam var term
+eval (LamApp idx@(Id _) term2) = (LamApp idx (eval term2))
+eval (LamApp (LamLam var term) term2) = eval (substitude term var term2)
+eval (LamApp app@(LamApp _ _) term2) = eval (LamApp (eval app) (eval term2))
 
 termTest = LamLam "x" (Id "y")
 subTerm = (Id "w")
